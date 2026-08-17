@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<title>Handschlag — ein Geheimnis über eine öffentliche Leitung</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Elliptische Kurven zum Anfassen: Punktaddition über einem endlichen Körper, Untergruppen, Diffie-Hellman-Schlüsseltausch und der gemessene Abstand zwischen ausrechenbar und aussichtslos." />
+
+<style>
+  :root {
+    --grund: #EEF0F2;
+    --feld:  #FBFCFD;
+    --tief:  #E1E5E9;
+    --linie: #C4CBD2;
+    --tinte: #14181C;
+    --leise: #5F6A75;
+    --netz:  #B2BAC3;
+    --alice: #1D5B8F;   /* der eine Teilnehmer */
+    --bob:   #8C4A16;   /* der andere */
+    --gut:   #37662C;   /* stimmt */
+    --warn:  #A32C22;   /* stimmt nicht */
+    --schatten: 0 1px 0 rgba(20,24,28,.05), 0 10px 24px -16px rgba(20,24,28,.45);
+    --f-fest: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "DejaVu Sans Mono", monospace;
+    --f-text: -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund: #101317; --feld: #171B20; --tief: #0B0D10; --linie: #2C333A;
+      --tinte: #E3E7EB; --leise: #8B959F; --netz: #3A424B;
+      --alice: #6FB2E8; --bob: #E0A063; --gut: #7FBF6A; --warn: #E0776B;
+      --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
+    }
+  }
+  :root[data-theme="dark"] {
+    --grund: #101317; --feld: #171B20; --tief: #0B0D10; --linie: #2C333A;
+    --tinte: #E3E7EB; --leise: #8B959F; --netz: #3A424B;
+    --alice: #6FB2E8; --bob: #E0A063; --gut: #7FBF6A; --warn: #E0776B;
+    --schatten: 0 1px 0 rgba(255,255,255,.03), 0 12px 30px -18px #000;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--grund); color:var(--tinte);
+    font-family:var(--f-text); font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .blatt { max-width:1160px; margin:0 auto;
+    padding: clamp(20px,4vw,44px) clamp(14px,3vw,28px) 64px;
+    display:flex; flex-direction:column; gap:18px; }
+
+  .marke { font-family:var(--f-fest); font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--leise); display:flex; gap:12px; align-items:center; margin:0; }
+  .marke::after { content:""; flex:1; height:1px; background:var(--linie); }
+  h1 { font-family:var(--f-fest); font-weight:700; font-size:clamp(24px,4.2vw,40px);
+    line-height:1.06; letter-spacing:-.03em; margin:0; text-wrap:balance; }
+  h1 span { color:var(--alice); }
+  .vorspann { max-width:70ch; color:var(--leise); margin:0; }
+  .vorspann b { color:var(--tinte); font-weight:600; }
+
+  .leiste { display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    background:var(--feld); border:1px solid var(--linie); padding:9px 11px; box-shadow:var(--schatten); }
+  .kl { font-family:var(--f-fest); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--leise); }
+  button, select, input { font-family:var(--f-fest); font-size:12px; color:var(--tinte); background:var(--grund);
+    border:1px solid var(--linie); border-radius:0; padding:6px 10px; letter-spacing:.03em; }
+  button, select { cursor:pointer; }
+  button:hover, select:hover { border-color:var(--alice); }
+  button:active { background:var(--tief); }
+  button:disabled { opacity:.45; cursor:default; }
+  button.haupt { background:var(--alice); border-color:var(--alice); color:var(--feld); }
+  button[aria-pressed="true"] { background:var(--tief); border-color:var(--alice); }
+  input[type=range] { padding:0; background:none; border:none; accent-color:var(--alice); vertical-align:middle; }
+  :focus-visible { outline:2px solid var(--alice); outline-offset:2px; }
+
+  .kasten { background:var(--feld); border:1px solid var(--linie); box-shadow:var(--schatten);
+    display:flex; flex-direction:column; min-width:0; }
+  .kasten-kopf { display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    padding:8px 11px; border-bottom:1px solid var(--linie); }
+  .kasten-leib { padding:11px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .buehne { display:grid; grid-template-columns: 1fr 330px; gap:18px; align-items:start; }
+  @media (max-width: 900px) { .buehne { grid-template-columns: minmax(0,1fr); } }
+  .saeule { display:flex; flex-direction:column; gap:18px; min-width:0; }
+
+  canvas { width:100%; height:auto; display:block; background:var(--tief); border:1px solid var(--linie);
+    cursor:crosshair; touch-action:none; }
+
+  .werte { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:1px;
+    background:var(--linie); border:1px solid var(--linie); }
+  .wert { background:var(--feld); padding:8px 10px; min-width:0; }
+  .wert .l { font-family:var(--f-fest); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--leise); }
+  .wert .n { font-family:var(--f-fest); font-size:17px; font-variant-numeric:tabular-nums; word-break:break-all; }
+  .wert .n.a { color:var(--alice); } .wert .n.b { color:var(--bob); }
+  .wert .n.gut { color:var(--gut); } .wert .n.warn { color:var(--warn); }
+  .wert .n.klein { font-size:12px; line-height:1.35; }
+
+  table.liste { border-collapse:collapse; width:100%; font-family:var(--f-fest); font-size:12px; }
+  table.liste th, table.liste td { border-bottom:1px solid var(--linie); padding:5px 7px; text-align:left; }
+  table.liste th { color:var(--leise); font-weight:400; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  table.liste td.z { text-align:right; font-variant-numeric:tabular-nums; }
+  .gutt { color:var(--gut); } .schlecht { color:var(--warn); }
+
+  .hinweis { font-family:var(--f-fest); font-size:12px; color:var(--leise); letter-spacing:0; margin:0; }
+  .hinweis b { color:var(--tinte); font-weight:600; }
+  .marker { display:inline-block; width:10px; height:10px; vertical-align:-1px; margin-right:5px; }
+  .lang { font-family:var(--f-fest); font-size:11.5px; word-break:break-all; color:var(--leise); }
+  .lang b { color:var(--tinte); font-weight:600; }
+
+  .noten { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:18px; margin-top:6px; }
+  .noten section { background:var(--feld); border:1px solid var(--linie); padding:12px 14px; box-shadow:var(--schatten); }
+  .noten h3 { font-family:var(--f-fest); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--leise); margin:0 0 6px; font-weight:400; }
+  .noten p { margin:0; font-size:14px; }
+  code { font-family:var(--f-fest); font-size:12.5px; background:var(--tief); padding:1px 4px; }
+  .fuss { color:var(--leise); font-size:13px; border-top:1px solid var(--linie); padding-top:12px; }
+  .fuss a { color:var(--alice); }
+</style>
+</head>
+<body>
+<main class="blatt">
+
+  <p class="marke">Blatt · Kryptografie</p>
+  <h1>Handschlag — ein <span>Geheimnis</span> über eine öffentliche Leitung</h1>
+  <p class="vorspann">
+    Zwei Fremde, eine mitgehörte Leitung, kein vorher vereinbartes Passwort — und am Ende
+    kennen beide dieselbe Zahl, der Lauscher nicht. Das trägt jede HTTPS-Verbindung.
+    Dahinter steht eine <b>Kurve über einem endlichen Körper</b>: hier klein genug, um jeden
+    Punkt einzeln zu sehen, und am Ende einmal in der Größe, die tatsächlich im Einsatz ist.
+  </p>
+
+  <div class="leiste">
+    <span class="kl">Kurve</span>
+    <select id="kurve" aria-label="Kurve wählen"></select>
+    <span class="kl" style="margin-left:6px">Zeigen</span>
+    <button id="b-linie" aria-pressed="true">Verbindungslinie</button>
+    <button id="b-gruppe" aria-pressed="true">Untergruppe von P</button>
+    <button id="b-netz" aria-pressed="false">Raster</button>
+    <span style="flex:1"></span>
+    <button id="b-thema">Ansicht</button>
+  </div>
+
+  <div class="buehne">
+    <div class="kasten">
+      <div class="kasten-kopf">
+        <span class="kl" id="kurven-name"></span>
+        <span class="kl" id="kurven-zahl" style="margin-left:auto"></span>
+      </div>
+      <div class="kasten-leib">
+        <canvas id="feld" width="1040" height="1040" aria-label="Punkte der Kurve über dem endlichen Körper"></canvas>
+        <p class="hinweis">
+          Jeder Punkt ist eine Lösung von <code>y² = x³ + ax + b</code> im Rest­klassen­körper.
+          <b>Klick</b> setzt <span class="marker" style="background:var(--bob)"></span><b>Q</b>,
+          <b>Umschalt-Klick</b> setzt <span class="marker" style="background:var(--alice)"></span><b>P</b>.
+          Die <b>Verbindungslinie</b> zeigt, dass eine Gerade hier keine Gerade ist: sie läuft am Rand
+          hinaus und links wieder hinein. Genau drei Kurvenpunkte liegen auf ihr — die dritte
+          Schneidung, gespiegelt, ist <b>P + Q</b>.
+        </p>
+      </div>
+    </div>
+
+    <div class="saeule">
+      <div class="kasten">
+        <div class="kasten-kopf"><span class="kl">Punktrechnung</span>
+          <button id="b-uebernehmen" style="margin-left:auto">P ← Q</button></div>
+        <div class="kasten-leib">
+          <div class="werte">
+            <div class="wert"><div class="l">P</div><div class="n a" id="w-p">—</div></div>
+            <div class="wert"><div class="l">Q</div><div class="n b" id="w-q">—</div></div>
+            <div class="wert"><div class="l">P + Q</div><div class="n" id="w-summe">—</div></div>
+            <div class="wert"><div class="l">Ordnung von P</div><div class="n" id="w-ordnung">—</div></div>
+          </div>
+          <p class="hinweis" id="lage"></p>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="kl">k</span>
+            <input type="range" id="k" min="1" max="40" value="7" style="flex:1;min-width:120px" aria-label="Vielfaches k" />
+            <span class="kl" id="k-zahl" style="min-width:3ch;text-align:right"></span>
+          </div>
+          <div class="werte">
+            <div class="wert"><div class="l">[k] P</div><div class="n" id="w-kp">—</div></div>
+            <div class="wert"><div class="l">Verdoppeln &amp; Addieren</div><div class="n klein" id="w-kette">—</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kasten">
+        <div class="kasten-kopf"><span class="kl">Der Handschlag</span></div>
+        <div class="kasten-leib">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="kl" style="color:var(--alice)">a geheim</span>
+            <input type="range" id="a-priv" min="1" max="40" value="11" style="flex:1;min-width:90px" aria-label="Geheimzahl a" />
+            <span class="kl" id="a-zahl" style="min-width:3ch;text-align:right"></span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="kl" style="color:var(--bob)">b geheim</span>
+            <input type="range" id="b-priv" min="1" max="40" value="19" style="flex:1;min-width:90px" aria-label="Geheimzahl b" />
+            <span class="kl" id="b-zahl" style="min-width:3ch;text-align:right"></span>
+          </div>
+          <table class="liste" id="tausch"><tbody></tbody></table>
+          <p class="hinweis" id="tausch-fuss"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="buehne">
+    <div class="kasten">
+      <div class="kasten-kopf">
+        <span class="kl">Rückwärts: aus [k]P das k gewinnen</span>
+        <button id="b-log" class="haupt" style="margin-left:auto">Knacken</button>
+      </div>
+      <div class="kasten-leib">
+        <p class="hinweis">
+          Die Sicherheit hängt an einer einzigen Frage: Wer <code>P</code> und <code>[k]P</code> sieht,
+          soll <code>k</code> nicht finden. Hier wird genau das zweimal versucht — stumpf durchzählen
+          und mit dem besten allgemein bekannten Verfahren (<b>Baby-Step-Giant-Step</b>, ein Zeit-gegen-Speicher-Tausch).
+          Beide Läufe zählen ihre Schritte mit; aus der gemessenen Geschwindigkeit dieses Browsers wird
+          hochgerechnet, was dieselbe Rechnung auf einer echten Kurve kosten würde.
+        </p>
+        <table class="liste" id="log-tabelle"><tbody></tbody></table>
+        <p class="hinweis" id="log-fuss">noch nicht versucht</p>
+      </div>
+    </div>
+
+    <div class="kasten">
+      <div class="kasten-kopf">
+        <span class="kl">Einmal in echter Größe</span>
+        <button id="b-gross" style="margin-left:auto">Rechnen</button>
+      </div>
+      <div class="kasten-leib">
+        <p class="hinweis">
+          Dieselben vier Rechenregeln, nur mit 256-Bit-Zahlen: <b>secp256k1</b>, die Kurve
+          hinter Bitcoin. Der Körper hat 2²⁵⁶ − 2³² − 977 Elemente.
+        </p>
+        <div id="gross-aus" class="lang">noch nicht gerechnet</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kasten">
+    <div class="kasten-kopf">
+      <span class="kl">Beweis statt Behauptung</span>
+      <button id="b-pruefen" class="haupt" style="margin-left:auto">Prüfen</button>
+    </div>
+    <div class="kasten-leib">
+      <p class="hinweis">
+        Die Gruppengesetze werden nicht angenommen, sondern <b>erschöpfend</b> nachgerechnet: auf der
+        kleinen Kurve über jedes Punktpaar und jedes Punkt-Tripel, dazu ein zweites, unabhängig
+        geschriebenes Rechenwerk mit beliebig großen Zahlen, das dieselben Ergebnisse liefern muss.
+        Am Ende steht die schärfste Probe, die es für secp256k1 gibt: die Gruppenordnung <code>n</code>
+        aus dem Standard mal dem Basispunkt muss den unendlich fernen Punkt ergeben — und zwar auf
+        das letzte Bit.
+      </p>
+      <table class="liste" id="pruef"><tbody></tbody></table>
+      <p class="hinweis" id="pruef-fuss">noch nicht geprüft</p>
+    </div>
+  </div>
+
+  <div class="noten">
+    <section>
+      <h3>Warum eine Kurve</h3>
+      <p>
+        Gebraucht wird eine Rechnung, die vorwärts leicht und rückwärts schwer ist. Punkte einer
+        Kurve lassen sich addieren; das Vielfache <code>[k]P</code> kostet nur so viele Schritte wie
+        <code>k</code> Bits hat. Rückwärts kennt niemand etwas Besseres als Wurzel aus der
+        Gruppenordnung — bei 256 Bit sind das 2¹²⁸ Schritte.
+      </p>
+    </section>
+    <section>
+      <h3>Was die Punktaddition ist</h3>
+      <p>
+        Über den reellen Zahlen: Gerade durch <b>P</b> und <b>Q</b>, dritter Schnittpunkt mit der
+        Kurve, an der x-Achse gespiegelt. Über einem endlichen Körper gilt dieselbe Formel, nur ist
+        „Gerade" jetzt eine Punktwolke und „Spiegeln" heißt <code>y → p − y</code>. Der unendlich
+        ferne Punkt ist das neutrale Element.
+      </p>
+    </section>
+    <section>
+      <h3>Wo es kippt</h3>
+      <p>
+        Nicht jede Kurve trägt: hat die Punktzahl nur kleine Primfaktoren, zerlegt man das Problem
+        in kleine Teilprobleme. Deshalb wählen Standards Kurven mit <b>primer</b> Ordnung. Der
+        Prüflauf zeigt beides — bei <code>p = 23</code> zerfällt die Gruppe in Untergruppen der
+        Größe 1, 2, 4, 7, 14, 28; bei secp256k1 gibt es nur 1 und n.
+      </p>
+    </section>
+  </div>
+
+  <p class="fuss">
+    Eine einzelne HTML-Datei. Kein Build, keine Bibliothek, nichts verlässt den Browser.
+    <span style="display:block;margin-top:8px">
+      Verwandt:
+      <a href="https://ssims437.github.io/plotterblaetter/">Plotterblätter</a> ·
+      <a href="https://ssims437.github.io/redundanz/">Redundanz</a> ·
+      <a href="https://ssims437.github.io/reparatur/">Reparatur</a> ·
+      <a href="https://ssims437.github.io/wuerfel/">Würfel</a> ·
+      <a href="https://ssims437.github.io/rechenwerk/">Rechenwerk</a> ·
+      <a href="https://ssims437.github.io/nachkomma/">Nachkomma</a> ·
+      <a href="https://ssims437.github.io/zeitsprung/">Zeitsprung</a> ·
+      <a href="https://ssims437.github.io/gradtage/">Gradtage</a> ·
+      <a href="https://ssims437.github.io/stimmfuehrung/">Stimmführung</a> ·
+      <a href="https://ssims437.github.io/verzerrung/">Verzerrung</a> ·
+      <a href="https://ssims437.github.io/wegewahl/">Wegewahl</a> ·
+      <a href="https://ssims437.github.io/frequenzgang/">Frequenzgang</a> ·
+      <a href="https://ssims437.github.io/indexbaum/">Indexbaum</a> ·
+      <a href="https://ssims437.github.io/auszaehlung/">Auszählung</a>
+    </span>
+  </p>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  /* ===================== Körperrechnung mit kleinen Zahlen =====================
+     p bleibt unter 2000, damit alle Produkte in Doubles exakt bleiben
+     (p² < 2⁵³). Das erlaubt einfache Zahlen statt BigInt — schnell genug für
+     die erschöpfenden Prüfungen weiter unten. */
+
+  const mod = (a, m) => ((a % m) + m) % m;
+
+  function invMod(a, m) {
+    let r0 = mod(a, m), r1 = m, s0 = 1, s1 = 0;
+    while (r1 !== 0) {
+      const q = Math.floor(r0 / r1);
+      [r0, r1] = [r1, r0 - q * r1];
+      [s0, s1] = [s1, s0 - q * s1];
+    }
+    if (r0 !== 1) throw new Error("nicht invertierbar: " + a + " mod " + m);
+    return mod(s0, m);
+  }
+
+  /* Eine Kurve y² = x³ + ax + b über GF(p). Der unendlich ferne Punkt ist null. */
+  function Kurve(p, a, b) {
+    const rechts = (x) => mod(mod(mod(x * x, p) * x, p) + mod(a * x, p) + b, p);
+
+    function aufKurve(P) {
+      if (P === null) return true;
+      return mod(P.y * P.y, p) === rechts(P.x);
+    }
+
+    function negativ(P) { return P === null ? null : { x: P.x, y: mod(-P.y, p) }; }
+
+    function addieren(P, Q) {
+      if (P === null) return Q;
+      if (Q === null) return P;
+      if (P.x === Q.x && mod(P.y + Q.y, p) === 0) return null;      // senkrechte Gerade
+      let m;
+      if (P.x === Q.x && P.y === Q.y) {
+        if (P.y === 0) return null;
+        m = mod(mod(3 * mod(P.x * P.x, p) + a, p) * invMod(mod(2 * P.y, p), p), p);   // Tangente
+      } else {
+        m = mod(mod(Q.y - P.y, p) * invMod(mod(Q.x - P.x, p), p), p);
+      }
+      const x = mod(mod(m * m, p) - P.x - Q.x, p);
+      const y = mod(mod(m * (P.x - x), p) - P.y, p);
+      return { x, y };
+    }
+
+    /* Verdoppeln und Addieren: so viele Schritte wie k Bits hat. */
+    function mal(k, P) {
+      let R = null, A = P, n = k;
+      if (n < 0) { n = -n; A = negativ(P); }
+      while (n > 0) {
+        if (n & 1) R = addieren(R, A);
+        A = addieren(A, A);
+        n >>= 1;
+      }
+      return R;
+    }
+
+    /* Wiederholte Addition — die langsame, offensichtliche Variante. Sie dient
+       im Prüflauf als unabhängige Referenz für mal(). */
+    function malStumpf(k, P) {
+      let R = null;
+      for (let i = 0; i < k; i++) R = addieren(R, P);
+      return R;
+    }
+
+    /* Alle Punkte: einmal die Quadrate durchlaufen, dann je x die Wurzeln nachschlagen. */
+    function punkte() {
+      const wurzeln = new Map();
+      for (let y = 0; y < p; y++) {
+        const q = mod(y * y, p);
+        if (!wurzeln.has(q)) wurzeln.set(q, []);
+        wurzeln.get(q).push(y);
+      }
+      const liste = [null];
+      for (let x = 0; x < p; x++) {
+        const ys = wurzeln.get(rechts(x));
+        if (ys) for (const y of ys) liste.push({ x, y });
+      }
+      return liste;
+    }
+
+    function ordnung(P) {
+      if (P === null) return 1;
+      let R = P, n = 1;
+      while (R !== null) { R = addieren(R, P); n++; if (n > p * 3) return -1; }
+      return n;
+    }
+
+    return { p, a, b, rechts, aufKurve, negativ, addieren, mal, malStumpf, punkte, ordnung };
+  }
+
+  /* ===================== Dasselbe noch einmal, mit beliebig großen Zahlen =====
+     Bewusst getrennt geschrieben — nicht als Verallgemeinerung der Version
+     oben, sondern als zweiter Zeuge. Im Prüflauf müssen beide auf derselben
+     kleinen Kurve Punkt für Punkt übereinstimmen; erst dann ist das Ergebnis
+     auf secp256k1 überhaupt etwas wert. */
+
+  function GrosseKurve(p, a, b) {
+    const N = BigInt;
+    const md = (x) => ((x % p) + p) % p;
+
+    function inv(x) {
+      let r0 = md(x), r1 = p, s0 = N(1), s1 = N(0);
+      while (r1 !== N(0)) {
+        const q = r0 / r1;
+        [r0, r1] = [r1, r0 - q * r1];
+        [s0, s1] = [s1, s0 - q * s1];
+      }
+      return md(s0);
+    }
+
+    function add(P, Q) {
+      if (P === null) return Q;
+      if (Q === null) return P;
+      if (P.x === Q.x && md(P.y + Q.y) === N(0)) return null;
+      let m;
+      if (P.x === Q.x && P.y === Q.y) {
+        if (P.y === N(0)) return null;
+        m = md(md(N(3) * P.x * P.x + a) * inv(md(N(2) * P.y)));
+      } else {
+        m = md(md(Q.y - P.y) * inv(md(Q.x - P.x)));
+      }
+      const x = md(m * m - P.x - Q.x);
+      return { x, y: md(m * (P.x - x) - P.y) };
+    }
+
+    function mal(k, P) {
+      let R = null, A = P, n = k;
+      while (n > N(0)) {
+        if (n & N(1)) R = add(R, A);
+        A = add(A, A);
+        n >>= N(1);
+      }
+      return R;
+    }
+
+    function aufKurve(P) {
+      if (P === null) return true;
+      return md(P.y * P.y) === md(P.x * P.x * P.x + a * P.x + b);
+    }
+
+    return { p, a, b, add, mal, aufKurve, inv };
+  }
+
+  /* secp256k1 — Zahlen aus dem Standard, nicht selbst gewählt. */
+  const SECP = (function () {
+    const p = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F");
+    const K = GrosseKurve(p, BigInt(0), BigInt(7));
+    const G = {
+      x: BigInt("0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"),
+      y: BigInt("0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8")
+    };
+    const n = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+    return { K, G, n, p };
+  })();
+
+  const hex = (x, stellen) => x.toString(16).toUpperCase().padStart(stellen || 64, "0");
+
+  /* ===================== Kurvenauswahl ===================== */
+  const KURVEN = [
+    { p: 23,   a: 1, b: 1, text: "Die Lehrbuchkurve. 28 Punkte — jeder einzeln zu sehen, jede Untergruppe abzählbar." },
+    { p: 97,   a: 2, b: 3, text: "Erste Größe, in der die Punkte streuen statt Muster zu bilden." },
+    { p: 223,  a: 0, b: 7, text: "Dieselbe Gleichung wie secp256k1, nur mit einem winzigen Körper." },
+    { p: 1009, a: 3, b: 8, text: "Tausend mal tausend Gitterplätze, gut tausend Punkte. Von Struktur nichts mehr zu erkennen — und trotzdem in Millisekunden zu knacken." }
+  ];
+
+  let K = null, KURVE_IDX = 0, PUNKTE = [], ORDNUNGEN = new Map();
+  let P = null, Q = null, BASIS = null;
+  let zeigeLinie = true, zeigeGruppe = true, zeigeNetz = false;
+
+  const schluessel = (Pt) => Pt === null ? "O" : Pt.x + "," + Pt.y;
+  const zeige = (Pt) => Pt === null ? "O (unendlich)" : "(" + Pt.x + ", " + Pt.y + ")";
+
+  function kurveSetzen(i) {
+    KURVE_IDX = i;
+    const d = KURVEN[i];
+    K = Kurve(d.p, d.a, d.b);
+    PUNKTE = K.punkte();
+    ORDNUNGEN = new Map();
+    for (const Pt of PUNKTE) ORDNUNGEN.set(schluessel(Pt), K.ordnung(Pt));
+    // Basispunkt: der mit der größten Ordnung, bei Gleichstand der erste
+    BASIS = PUNKTE.filter((x) => x !== null)
+      .reduce((best, x) => ORDNUNGEN.get(schluessel(x)) > ORDNUNGEN.get(schluessel(best)) ? x : best);
+    P = BASIS;
+    const echte = PUNKTE.filter((x) => x !== null);
+    Q = echte[Math.min(echte.length - 1, Math.floor(echte.length / 3))];
+    const ordB = ORDNUNGEN.get(schluessel(BASIS));
+    for (const id of ["k", "a-priv", "b-priv"]) {
+      const el = $(id);
+      el.max = String(ordB - 1);
+      if (+el.value > ordB - 1) el.value = String(Math.max(1, Math.floor(ordB / 3)));
+    }
+    alles();
+  }
+
+  /* ===================== Zeichnen ===================== */
+  function farbe(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function zeichnen() {
+    const c = $("feld"), g = c.getContext("2d");
+    const p = K.p;
+    const rand = 14;
+    const H = c.width;                                  // quadratisch: x und y sind gleichberechtigt
+    if (c.height !== H) c.height = H;
+    const s = (H - 2 * rand) / p;                       // ein Gitterplatz in Pixeln
+    const px = (x) => rand + (x + 0.5) * s;
+    const py = (y) => H - rand - (y + 0.5) * s;         // y nach oben, wie gewohnt
+    const r = Math.max(1.1, Math.min(7, s * 0.34));
+
+    g.fillStyle = farbe("--tief"); g.fillRect(0, 0, H, H);
+
+    if (zeigeNetz && p <= 240) {
+      g.strokeStyle = farbe("--netz"); g.globalAlpha = 0.5; g.lineWidth = 1;
+      const schritt = p <= 32 ? 1 : 10;
+      for (let i = 0; i <= p; i += schritt) {
+        g.beginPath(); g.moveTo(px(i - 0.5), py(-0.5)); g.lineTo(px(i - 0.5), py(p - 0.5)); g.stroke();
+        g.beginPath(); g.moveTo(px(-0.5), py(i - 0.5)); g.lineTo(px(p - 0.5), py(i - 0.5)); g.stroke();
+      }
+      g.globalAlpha = 1;
+    }
+
+    // die Verbindungsgerade durch P und Q — als das, was sie hier ist: eine Punktwolke
+    if (zeigeLinie && P && Q) {
+      g.fillStyle = farbe("--netz");
+      const senkrecht = P.x === Q.x;
+      if (senkrecht) {
+        for (let y = 0; y < p; y++) { g.beginPath(); g.arc(px(P.x), py(y), Math.max(1, r * 0.42), 0, 7); g.fill(); }
+      } else {
+        let m;
+        try {
+          m = (P.x === Q.x && P.y === Q.y)
+            ? mod(mod(3 * mod(P.x * P.x, p) + K.a, p) * invMod(mod(2 * P.y, p), p), p)
+            : mod(mod(Q.y - P.y, p) * invMod(mod(Q.x - P.x, p), p), p);
+          for (let x = 0; x < p; x++) {
+            const y = mod(m * (x - P.x) + P.y, p);
+            g.beginPath(); g.arc(px(x), py(y), Math.max(1, r * 0.42), 0, 7); g.fill();
+          }
+        } catch (e) { /* Tangente in einem Punkt mit y = 0: senkrecht, oben behandelt */ }
+      }
+    }
+
+    // die Untergruppe, die P erzeugt: P, 2P, 3P … der Reihe nach verbunden
+    if (zeigeGruppe && P) {
+      const kette = [];
+      let R = P;
+      const ord = ORDNUNGEN.get(schluessel(P));
+      for (let i = 1; i < ord; i++) { kette.push(R); R = K.addieren(R, P); }
+      g.strokeStyle = farbe("--alice"); g.globalAlpha = 0.28; g.lineWidth = Math.max(1, s * 0.09);
+      g.beginPath();
+      kette.forEach((Pt, i) => i ? g.lineTo(px(Pt.x), py(Pt.y)) : g.moveTo(px(Pt.x), py(Pt.y)));
+      g.stroke(); g.globalAlpha = 1;
+    }
+
+    // alle Punkte der Kurve
+    g.fillStyle = farbe("--tinte");
+    for (const Pt of PUNKTE) {
+      if (Pt === null) continue;
+      g.beginPath(); g.arc(px(Pt.x), py(Pt.y), r, 0, 7); g.fill();
+    }
+
+    // die drei Beteiligten der Addition hervorheben
+    const summe = K.addieren(P, Q);
+    const dritte = summe === null ? null : K.negativ(summe);
+    const marken = [
+      [dritte, "--netz", "−(P+Q)"], [summe, "--gut", "P+Q"],
+      [Q, "--bob", "Q"], [P, "--alice", "P"]
+    ];
+    g.font = "600 " + Math.max(11, Math.min(20, s * 1.5)) + "px " + "ui-monospace, monospace";
+    for (const [Pt, f, name] of marken) {
+      if (!Pt) continue;
+      const gr = Math.max(4, r * 2.1);
+      g.strokeStyle = farbe(f); g.lineWidth = Math.max(1.6, s * 0.13);
+      g.beginPath(); g.arc(px(Pt.x), py(Pt.y), gr, 0, 7); g.stroke();
+      g.fillStyle = farbe(f); g.beginPath(); g.arc(px(Pt.x), py(Pt.y), Math.max(1.6, r * 0.9), 0, 7); g.fill();
+      if (p <= 240) {
+        g.fillText(name, px(Pt.x) + gr + 4, py(Pt.y) - gr - 2);
+      }
+    }
+  }
+
+  /* ===================== Anzeigen ===================== */
+  function alles() {
+    const d = KURVEN[KURVE_IDX];
+    $("kurven-name").textContent = "y² = x³ + " + d.a + "x + " + d.b + "  über GF(" + d.p + ")";
+    const anzahl = PUNKTE.length;
+    const hasse = 2 * Math.sqrt(d.p);
+    $("kurven-zahl").textContent = anzahl + " Punkte · Hasse erlaubt " +
+      Math.ceil(d.p + 1 - hasse) + "…" + Math.floor(d.p + 1 + hasse);
+
+    $("w-p").textContent = zeige(P);
+    $("w-q").textContent = zeige(Q);
+    const summe = K.addieren(P, Q);
+    $("w-summe").textContent = zeige(summe);
+    const ordP = ORDNUNGEN.get(schluessel(P));
+    $("w-ordnung").textContent = ordP + (ordP === PUNKTE.length ? " (alle)" : " von " + PUNKTE.length);
+
+    const teiler = [];
+    for (let t = 1; t <= PUNKTE.length; t++) if (PUNKTE.length % t === 0) teiler.push(t);
+    $("lage").innerHTML = "<b>" + d.text + "</b> Untergruppengrößen (Teiler von " + PUNKTE.length +
+      "): " + teiler.join(", ") + ". Jeder Punkt hat eine davon als Ordnung — nichts anderes ist möglich.";
+
+    const k = +$("k").value;
+    $("k-zahl").textContent = k;
+    const kp = K.mal(k, P);
+    $("w-kp").textContent = zeige(kp);
+    const bits = k.toString(2);
+    let schritte = 0;
+    for (let i = bits.length - 1; i >= 0; i--) { schritte++; if (bits[i] === "1") schritte++; }
+    $("w-kette").textContent = k + " = " + bits + "₂ → " + schritte + " Punktadditionen statt " + k;
+
+    handschlag();
+    zeichnen();
+  }
+
+  function handschlag() {
+    const a = +$("a-priv").value, b = +$("b-priv").value;
+    $("a-zahl").textContent = a; $("b-zahl").textContent = b;
+    const A = K.mal(a, BASIS), B = K.mal(b, BASIS);
+    const s1 = K.mal(a, B), s2 = K.mal(b, A);
+    const gleich = schluessel(s1) === schluessel(s2);
+    const tb = $("tausch").querySelector("tbody");
+    tb.textContent = "";
+    const zeile = (was, wert, klasse) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + was + "</td><td class='" + (klasse || "") + "'>" + wert + "</td>";
+      tb.append(tr);
+    };
+    zeile("Basispunkt G <span class='kl'>öffentlich</span>", zeige(BASIS));
+    zeile("A = [a] G <span class='kl'>über die Leitung</span>", zeige(A));
+    zeile("B = [b] G <span class='kl'>über die Leitung</span>", zeige(B));
+    zeile("[a] B <span class='kl'>nur der eine</span>", zeige(s1), "gutt");
+    zeile("[b] A <span class='kl'>nur der andere</span>", zeige(s2), "gutt");
+    $("tausch-fuss").innerHTML = gleich
+      ? "Beide landen auf demselben Punkt — <b>ohne</b> dass a oder b die Leitung gesehen hat. " +
+        "Über die Leitung ging G, A und B; wer nur das hat, müsste den Rückweg gehen."
+      : "<b style='color:var(--warn)'>Unerwartet: die Geheimnisse stimmen nicht überein.</b>";
+  }
+
+  /* ===================== Rückwärtsrechnen ===================== */
+  function knacken() {
+    const ord = ORDNUNGEN.get(schluessel(BASIS));
+    const k = Math.max(2, Math.floor(ord * 0.618));           // irgendwo mitten drin
+    const Z = K.mal(k, BASIS);
+    const tb = $("log-tabelle").querySelector("tbody");
+    tb.textContent = "";
+    const zeile = (was, wert, klasse) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + was + "</td><td class='z " + (klasse || "") + "'>" + wert + "</td>";
+      tb.append(tr);
+    };
+
+    // 1. stumpf durchzählen
+    let t0 = performance.now(), stumpfSchritte = 0, gefunden = -1, R = null;
+    for (let i = 0; i <= ord; i++) {
+      stumpfSchritte++;
+      if (schluessel(R) === schluessel(Z)) { gefunden = i; break; }
+      R = K.addieren(R, BASIS);
+    }
+    const t1 = performance.now();
+
+    // 2. Baby-Step-Giant-Step: √n speichern, √n suchen
+    const m = Math.ceil(Math.sqrt(ord));
+    let bsgsSchritte = 0;
+    const tafel = new Map();
+    let S = null;
+    for (let j = 0; j < m; j++) { tafel.set(schluessel(S), j); S = K.addieren(S, BASIS); bsgsSchritte++; }
+    const sprung = K.negativ(K.mal(m, BASIS));
+    let T = Z, bsgsK = -1;
+    for (let i = 0; i < m; i++) {
+      bsgsSchritte++;
+      const treffer = tafel.get(schluessel(T));
+      if (treffer !== undefined) { bsgsK = i * m + treffer; break; }
+      T = K.addieren(T, sprung);
+    }
+    const t2 = performance.now();
+
+    /* Die Geschwindigkeit lässt sich an diesen Läufen nicht messen — bei GF(23) sind
+       das neun Schritte, das liegt unter der Auflösung der Uhr. Also ein eigener,
+       ehrlich langer Lauf: mindestens 150 ms nichts als Punktadditionen. */
+    let bench = 0;
+    const tb0 = performance.now();
+    let X = BASIS;
+    while (performance.now() - tb0 < 150) {
+      for (let i = 0; i < 2000; i++) { X = K.addieren(X, BASIS); bench++; }
+    }
+    const rate = bench / ((performance.now() - tb0) / 1000);
+
+    zeile("gesuchtes k", k);
+    zeile("Gruppenordnung n", ord);
+    zeile("stumpf durchzählen", stumpfSchritte + " Schritte", gefunden === k ? "gutt" : "schlecht");
+    zeile("Baby-Step-Giant-Step", bsgsSchritte + " Schritte", bsgsK === k ? "gutt" : "schlecht");
+    zeile("gefunden", (gefunden === k && bsgsK === k) ? "beide k = " + k : "Fehler",
+      (gefunden === k && bsgsK === k) ? "gutt" : "schlecht");
+    zeile("gemessene Geschwindigkeit", Math.round(rate).toLocaleString("de-AT") + " Punktadditionen/s");
+
+    // Hochrechnung auf secp256k1: 2^128 Schritte bei genau dieser Geschwindigkeit
+    const jahre = Math.pow(2, 128) / rate / (365.2425 * 86400);
+    const exp = Math.floor(Math.log10(jahre));
+    const mantisse = (jahre / Math.pow(10, exp)).toFixed(1);
+    zeile("dasselbe auf secp256k1", mantisse + " · 10^" + exp + " Jahre", "schlecht");
+    $("log-fuss").innerHTML = "Bei <code>p = " + K.p + "</code> ist der Rückweg eine Sache von " +
+      "Millisekunden — das Verfahren ist also nicht die Sicherheit, die <b>Größe</b> ist es. " +
+      "Baby-Step-Giant-Step braucht ungefähr 2·√n Schritte und √n Speicherplätze; für secp256k1 " +
+      "wären das 2¹²⁸ Schritte, hochgerechnet mit der Geschwindigkeit, die dieser Browser eben in " +
+      "einem eigenen Messlauf gezeigt hat (" + Math.round(bench).toLocaleString("de-AT") +
+      " Additionen am Stück). Das Alter des Universums sind 1,4·10¹⁰ Jahre.";
+  }
+
+  /* ===================== Einmal in echter Größe ===================== */
+  function grossRechnen() {
+    const { K: EK, G, n } = SECP;
+    const t0 = performance.now();
+    const a = BigInt("0x" + "C0FFEE" + "1".repeat(52) + "AB");     // feste, nachvollziehbare Geheimzahl
+    const b = BigInt("0x" + "BADA55" + "7".repeat(52) + "3F");
+    const A = EK.mal(a, G), B = EK.mal(b, G);
+    const s1 = EK.mal(a, B), s2 = EK.mal(b, A);
+    const nG = EK.mal(n, G);
+    const t1 = performance.now();
+    const zeilen = [
+      ["Körper p", hex(SECP.p)],
+      ["Basispunkt G.x", hex(G.x)],
+      ["A = [a]G .x", hex(A.x)],
+      ["B = [b]G .x", hex(B.x)],
+      ["gemeinsames Geheimnis .x", hex(s1.x)],
+      ["dasselbe von der anderen Seite", hex(s2.x)]
+    ];
+    const gleich = s1.x === s2.x && s1.y === s2.y;
+    $("gross-aus").innerHTML =
+      zeilen.map(([l, v]) => "<div style='margin-bottom:6px'><b>" + l + "</b><br>" + v + "</div>").join("") +
+      "<div style='margin-bottom:6px'><b>[n]G</b><br>" +
+      (nG === null ? "<span class='gutt'>O — der unendlich ferne Punkt, wie es der Standard verlangt</span>"
+                   : "<span class='schlecht'>nicht O: " + hex(nG.x) + "</span>") + "</div>" +
+      "<div><b>Beide Seiten gleich:</b> " +
+      (gleich ? "<span class='gutt'>ja</span>" : "<span class='schlecht'>nein</span>") +
+      " · 5 Punktmultiplikationen mit 256 Bit in " + (t1 - t0).toFixed(1) + " ms</div>";
+  }
+
+  /* ===================== Prüflauf ===================== */
+  function pruefen() {
+    const tb = $("pruef").querySelector("tbody");
+    tb.textContent = "";
+    let fehler = 0, rechnungen = 0;
+    const zeile = (was, gut, text) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + was + "</td><td style='color:" + (gut ? "var(--gut)" : "var(--warn)") + "'>" + text + "</td>";
+      tb.append(tr);
+      if (!gut) fehler++;
+    };
+
+    const klein = Kurve(23, 1, 1);
+    const pk = klein.punkte();
+
+    // 1. Jeder gefundene Punkt erfüllt die Gleichung, und es gibt keinen weiteren.
+    {
+      let gut = true, gezaehlt = 0;
+      for (const Pt of pk) if (!klein.aufKurve(Pt)) gut = false;
+      for (let x = 0; x < 23; x++) for (let y = 0; y < 23; y++) {
+        rechnungen++;
+        if (klein.aufKurve({ x, y })) gezaehlt++;
+      }
+      zeile("Punktmenge vollständig", gut && gezaehlt === pk.length - 1,
+        "23² = 529 Gitterplätze abgesucht, " + gezaehlt + " Lösungen — dazu O, macht " + pk.length);
+    }
+
+    // 2. Gruppengesetze, erschöpfend über alle Paare und Tripel.
+    {
+      let kommutativ = true, neutral = true, invers = true;
+      for (const A of pk) {
+        rechnungen += 2;
+        if (schluessel(klein.addieren(A, null)) !== schluessel(A)) neutral = false;
+        if (klein.addieren(A, klein.negativ(A)) !== null) invers = false;
+        for (const B of pk) {
+          rechnungen += 2;
+          if (schluessel(klein.addieren(A, B)) !== schluessel(klein.addieren(B, A))) kommutativ = false;
+        }
+      }
+      zeile("neutrales Element und Inverse", neutral && invers,
+        pk.length + " Punkte: P + O = P und P + (−P) = O, ausnahmslos");
+      zeile("Addition ist kommutativ", kommutativ,
+        pk.length + "² = " + (pk.length * pk.length) + " Paare geprüft");
+
+      let assoziativ = true, geprueft = 0;
+      for (const A of pk) for (const B of pk) for (const C of pk) {
+        geprueft++;
+        rechnungen += 4;
+        const l = klein.addieren(klein.addieren(A, B), C);
+        const r = klein.addieren(A, klein.addieren(B, C));
+        if (schluessel(l) !== schluessel(r)) { assoziativ = false; }
+      }
+      zeile("Addition ist assoziativ", assoziativ,
+        geprueft.toLocaleString("de-AT") + " Tripel geprüft — der Teil, den man sonst glaubt");
+    }
+
+    // 3. Verdoppeln-und-Addieren gegen wiederholte Addition, für alle Punkte und alle k.
+    {
+      let gut = true, faelle = 0, schritteSchnell = 0, schritteStumpf = 0;
+      const K97 = Kurve(97, 2, 3);
+      const p97 = K97.punkte();
+      for (const Pt of p97) {
+        const ord = K97.ordnung(Pt);
+        for (let k = 0; k <= ord; k++) {
+          faelle++;
+          rechnungen += k;
+          if (schluessel(K97.mal(k, Pt)) !== schluessel(K97.malStumpf(k, Pt))) gut = false;
+          schritteStumpf += k;
+          const bits = k.toString(2);
+          schritteSchnell += k === 0 ? 0 : bits.length + (bits.split("1").length - 1);
+        }
+      }
+      zeile("schnelle Multiplikation stimmt", gut,
+        faelle.toLocaleString("de-AT") + " Fälle über GF(97) gegen wiederholte Addition · " +
+        schritteSchnell.toLocaleString("de-AT") + " statt " + schritteStumpf.toLocaleString("de-AT") + " Additionen");
+    }
+
+    // 4. Lagrange und Hasse — für jede der vier Kurven.
+    {
+      let lagrange = true, hasse = true, zeilen = [];
+      for (const d of KURVEN) {
+        const Kx = Kurve(d.p, d.a, d.b);
+        const px = Kx.punkte();
+        const nn = px.length;
+        for (const Pt of px) { rechnungen++; if (nn % Kx.ordnung(Pt) !== 0) lagrange = false; }
+        const spanne = 2 * Math.sqrt(d.p);
+        if (nn < d.p + 1 - spanne || nn > d.p + 1 + spanne) hasse = false;
+        zeilen.push("GF(" + d.p + "): " + nn);
+      }
+      zeile("Ordnung teilt Gruppenordnung", lagrange, "alle Punkte aller vier Kurven (Lagrange)");
+      zeile("Punktzahl im Hasse-Intervall", hasse, zeilen.join(" · "));
+    }
+
+    // 5. Der Handschlag, erschöpfend über alle Geheimzahl-Paare.
+    {
+      const Kx = Kurve(97, 2, 3);
+      const px = Kx.punkte().filter((x) => x !== null);
+      const G = px.reduce((best, x) => Kx.ordnung(x) > Kx.ordnung(best) ? x : best);
+      const ord = Kx.ordnung(G);
+      let gut = true, paare = 0;
+      for (let a = 1; a < ord; a++) {
+        const A = Kx.mal(a, G);
+        for (let b = 1; b < ord; b++) {
+          paare++;
+          rechnungen += 2;
+          const s1 = Kx.mal(a, Kx.mal(b, G));
+          const s2 = Kx.mal(b, A);
+          if (schluessel(s1) !== schluessel(s2)) gut = false;
+        }
+      }
+      zeile("Handschlag trifft immer", gut,
+        paare.toLocaleString("de-AT") + " Geheimzahl-Paare über GF(97), Ordnung " + ord + " — kein Ausfall");
+    }
+
+    // 6. Der zweite Zeuge: das BigInt-Rechenwerk auf derselben kleinen Kurve.
+    {
+      const gross = GrosseKurve(BigInt(23), BigInt(1), BigInt(1));
+      const nachGross = (Pt) => Pt === null ? null : { x: BigInt(Pt.x), y: BigInt(Pt.y) };
+      const zurueck = (Pt) => Pt === null ? "O" : Number(Pt.x) + "," + Number(Pt.y);
+      let gut = true, paare = 0;
+      for (const A of pk) for (const B of pk) {
+        paare++;
+        rechnungen += 2;
+        const einfach = schluessel(klein.addieren(A, B));
+        const grossErg = zurueck(gross.add(nachGross(A), nachGross(B)));
+        if (einfach !== grossErg) gut = false;
+      }
+      let malGut = true;
+      for (const A of pk) for (let k = 0; k <= 30; k++) {
+        rechnungen++;
+        if (schluessel(klein.mal(k, A)) !== zurueck(gross.mal(BigInt(k), nachGross(A)))) malGut = false;
+      }
+      zeile("zwei Rechenwerke, ein Ergebnis", gut && malGut,
+        paare + " Additionen und " + (pk.length * 31) + " Multiplikationen, Zahlen gegen BigInt");
+    }
+
+    // 7. secp256k1: die Zahlen aus dem Standard müssen zusammenpassen.
+    {
+      const { K: EK, G, n } = SECP;
+      rechnungen += 3;
+      const aufK = EK.aufKurve(G);
+      const nG = EK.mal(n, G);
+      const nMinus1 = EK.mal(n - BigInt(1), G);
+      const spiegel = nMinus1 !== null && nMinus1.x === G.x && nMinus1.y === (SECP.p - G.y);
+      zeile("secp256k1: G liegt auf der Kurve", aufK, "y² ≡ x³ + 7 mit 256-Bit-Zahlen");
+      zeile("secp256k1: [n]G = O", nG === null,
+        nG === null ? "die Ordnung aus dem Standard trifft auf das letzte Bit" : "nicht O");
+      zeile("secp256k1: [n−1]G = −G", spiegel, spiegel ? "und damit die Umgebung von n auch" : "trifft nicht");
+
+      // Handschlag mit 256-Bit-Zahlen, dazu die Rechenregel [a]([b]G) = [ab mod n]G
+      const a = BigInt("0x" + "C0FFEE" + "1".repeat(52) + "AB");
+      const b = BigInt("0x" + "BADA55" + "7".repeat(52) + "3F");
+      const s1 = EK.mal(a, EK.mal(b, G));
+      const s2 = EK.mal(b, EK.mal(a, G));
+      const s3 = EK.mal((a * b) % n, G);
+      rechnungen += 5;
+      const einig = s1.x === s2.x && s2.x === s3.x && s1.y === s3.y;
+      zeile("secp256k1: Handschlag und Rechenregel", einig,
+        "[a]([b]G) = [b]([a]G) = [a·b mod n]G, drei Wege ein Punkt");
+    }
+
+    $("pruef-fuss").innerHTML = fehler === 0
+      ? "<b>" + rechnungen.toLocaleString("de-AT") + " Einzelrechnungen, kein Widerspruch.</b> " +
+        "Die Assoziativität ist der interessante Punkt: sie folgt aus der Geometrie nicht offensichtlich, " +
+        "und mit ihr steht oder fällt, dass die Punkte überhaupt eine Gruppe bilden."
+      : "<b style='color:var(--warn)'>" + fehler + " Prüfung(en) fehlgeschlagen.</b>";
+  }
+
+  /* ===================== Bedienung ===================== */
+  const auswahl = $("kurve");
+  KURVEN.forEach((d, i) => {
+    const o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = "GF(" + d.p + ")  a=" + d.a + " b=" + d.b;
+    auswahl.append(o);
+  });
+  auswahl.addEventListener("change", () => kurveSetzen(+auswahl.value));
+
+  $("feld").addEventListener("pointerdown", (e) => {
+    const el = e.currentTarget, r = el.getBoundingClientRect();
+    const H = el.width, rand = 14, s = (H - 2 * rand) / K.p;
+    const cx = (e.clientX - r.left) * (H / r.width);
+    const cy = (e.clientY - r.top) * (H / r.height);
+    const x = Math.round((cx - rand) / s - 0.5);
+    const y = Math.round((H - rand - cy) / s - 0.5);
+    let bester = null, beste = Infinity;
+    for (const Pt of PUNKTE) {
+      if (Pt === null) continue;
+      const d = (Pt.x - x) * (Pt.x - x) + (Pt.y - y) * (Pt.y - y);
+      if (d < beste) { beste = d; bester = Pt; }
+    }
+    if (bester && beste <= Math.max(4, K.p * K.p / 900)) {
+      if (e.shiftKey) P = bester; else Q = bester;
+      alles();
+    }
+  });
+
+  $("b-uebernehmen").addEventListener("click", () => { P = Q; alles(); });
+  const schalter = (id, lesen, setzen) => {
+    $(id).addEventListener("click", () => {
+      setzen(!lesen());
+      $(id).setAttribute("aria-pressed", String(lesen()));
+      zeichnen();
+    });
+  };
+  schalter("b-linie", () => zeigeLinie, (v) => zeigeLinie = v);
+  schalter("b-gruppe", () => zeigeGruppe, (v) => zeigeGruppe = v);
+  schalter("b-netz", () => zeigeNetz, (v) => zeigeNetz = v);
+
+  $("k").addEventListener("input", alles);
+  $("a-priv").addEventListener("input", handschlag);
+  $("b-priv").addEventListener("input", handschlag);
+  $("b-log").addEventListener("click", knacken);
+  $("b-gross").addEventListener("click", grossRechnen);
+  $("b-pruefen").addEventListener("click", pruefen);
+  $("b-thema").addEventListener("click", () => {
+    const jetzt = document.documentElement.getAttribute("data-theme");
+    const dunkel = matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.setAttribute("data-theme", jetzt ? (jetzt === "dark" ? "light" : "dark") : (dunkel ? "light" : "dark"));
+    zeichnen();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", zeichnen);
+
+  kurveSetzen(0);
+})();
+</script>
+</body>
+</html>
